@@ -1,57 +1,46 @@
-﻿using System.Web.Http;
-using CsRopExample.Controllers;
-using CsRopExample.DataAccessLayer;
-using Owin;
+﻿using CsRopExample.DataAccessLayer;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace CsRopExample
 {
-    class Startup
+    public class Startup
     {
-        // This code configures Web API. The Startup class is specified as a type
-        // parameter in the WebApp.Start method.
-        public void Configuration(IAppBuilder appBuilder)
+        public Startup(IConfiguration configuration)
         {
-            // Configure Web API for self-host. 
-            var config = new HttpConfiguration();
-
-            ConfigureRoutes(config);
-            ConfigureDependencies(config);
-            ConfigureJsonSerialization(config);
-
-            // add logging
-            config.MessageHandlers.Add(new MessageLoggingHandler());
-
-            appBuilder.UseWebApi(config);
+            Configuration = configuration;
         }
 
-        private static void ConfigureRoutes(HttpConfiguration config)
+        public IConfiguration Configuration { get; }
+
+        // This method gets called by the runtime. Use this method to add services to the container.
+        public void ConfigureServices(IServiceCollection services)
         {
-            config.MapHttpAttributeRoutes();
+            services.AddSingleton<ICustomerDao, CustomerDao>();
+            services.AddControllers();
         }
 
-        /// <summary>
-        /// Setup the dependency injection for controllers.
-        /// </summary>
-        private static void ConfigureDependencies(HttpConfiguration config)
+        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
-            var dependencyResolver = new DependencyResolver();
+            if (env.IsDevelopment())
+            {
+                app.UseDeveloperExceptionPage();
+            }
 
-            // create the service to be injected
-            var customerDao = new CustomerDao();
+            app.UseHttpsRedirection();
 
-            // setup a constructor for a CustomersController
-            dependencyResolver.RegisterType<CustomersController>(() => new CustomersController(customerDao));
+            app.UseRouting();
 
-            // assign the resolver to the config
-            config.DependencyResolver = dependencyResolver;
+            app.UseAuthorization();
+
+            app.UseEndpoints(endpoints =>
+            {
+                endpoints.MapControllers();
+            });
         }
-
-        private static void ConfigureJsonSerialization(HttpConfiguration config)
-        {
-            var jsonSettings = config.Formatters.JsonFormatter.SerializerSettings;
-            jsonSettings.Formatting = Newtonsoft.Json.Formatting.Indented;
-        }
-
     }
-
 }

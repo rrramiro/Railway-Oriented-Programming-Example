@@ -1,10 +1,11 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Linq;
-using System.Web.Http;
 using CsRopExample.DataAccessLayer;
 using CsRopExample.DomainModels;
 using CsRopExample.Dtos;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 
 namespace CsRopExample.Controllers
 {
@@ -26,7 +27,9 @@ namespace CsRopExample.Controllers
     /// 
     /// Compare this code with the F# equivalent to see the railway-oriented approach to handling errors.
     /// </remarks>
-    public class CustomersController : ApiController
+
+    [ApiController]
+    public class CustomersController : ControllerBase
     {
 
         readonly ICustomerDao _dao;
@@ -48,7 +51,7 @@ namespace CsRopExample.Controllers
         /// </summary>
         [Route("customers/{customerId}")]
         [HttpGet]
-        public IHttpActionResult Get(int customerId)
+        public ObjectResult Get(int customerId)
         {
             var custId = CustomerId.Create(customerId);
             var cust = _dao.GetById(custId);
@@ -69,7 +72,7 @@ namespace CsRopExample.Controllers
         /// </remarks>
         [Route("customersE/{customerId}")]
         [HttpGet]
-        public IHttpActionResult GetWithErrorHandling(int customerId)
+        public ActionResult GetWithErrorHandling(int customerId)
         {
             Log("GetWithErrorHandling {0}", customerId);
 
@@ -103,7 +106,7 @@ namespace CsRopExample.Controllers
             {
                 // handle database errors
                 Log("Exception: {0}", ex.Message);
-                return this.InternalServerError(ex);
+                return StatusCode(StatusCodes.Status500InternalServerError, ex);
             }
         }
 
@@ -116,7 +119,7 @@ namespace CsRopExample.Controllers
         /// </summary>
         [Route("customers/{customerId}")]
         [HttpPost]
-        public IHttpActionResult Post(int customerId, [FromBody] CustomerDto dto)
+        public ActionResult Post(int customerId, [FromBody] CustomerDto dto)
         {
             dto.Id = customerId;
             var cust = DtoConverter.DtoToCustomer(dto);
@@ -138,7 +141,7 @@ namespace CsRopExample.Controllers
         /// </remarks>
         [Route("customersE/{customerId}")]
         [HttpPost]
-        public IHttpActionResult PostWithErrorHandling(int customerId, [FromBody] CustomerDto dto)
+        public ActionResult PostWithErrorHandling(int customerId, [FromBody] CustomerDto dto)
         {
             dto.Id = customerId;
 
@@ -171,7 +174,7 @@ namespace CsRopExample.Controllers
             {
                 // handle database errors
                 Log("Exception: {0}", ex.Message);
-                return this.InternalServerError(ex);
+                return StatusCode(StatusCodes.Status500InternalServerError, ex);
             }
             finally
             {
@@ -191,7 +194,7 @@ namespace CsRopExample.Controllers
         /// </summary>
         [Route("example")]
         [HttpGet]
-        public IHttpActionResult GetExample()
+        public ActionResult GetExample()
         {
             var dto = new CustomerDto { FirstName = "Alice", LastName = "Adams", Email = "alice@example.com" };
             return this.Ok(dto);
@@ -202,7 +205,7 @@ namespace CsRopExample.Controllers
         /// </summary>
         [Route("customers/")]
         [HttpGet]
-        public IHttpActionResult GetAll()
+        public ActionResult GetAll()
         {
             try
             {
@@ -211,7 +214,7 @@ namespace CsRopExample.Controllers
             }
             catch (Exception ex)
             {
-                return this.InternalServerError(ex);
+                return StatusCode(StatusCodes.Status500InternalServerError, ex);
             }
         }
 

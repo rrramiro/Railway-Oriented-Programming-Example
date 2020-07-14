@@ -183,3 +183,7 @@ UpgradeLog*.htm
 # Microsoft Fakes
 FakesAssemblies/
 /src/FsXsd/_junk
+
+.fake
+.ionide
+.paket/

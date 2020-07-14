@@ -1,18 +1,11 @@
 ﻿namespace FsRopExample.Controllers
 
-open System
-open Owin 
-open Microsoft.Owin
-open System.Web.Http 
-open System.Web.Http.Dispatcher
-open System.Net
-open System.Net.Http.Formatting
-open System.Web.Http.Results
-
 open FsRopExample
 open FsRopExample.Rop
 open FsRopExample.Dtos
 open FsRopExample.DomainModel
+open Microsoft.AspNetCore.Mvc
+open Microsoft.AspNetCore.Http
 
 
 /// A set of helper functions for the CustomersController
@@ -83,20 +76,20 @@ module CustomersControllerHelper =
         |> List.reduce (+)
 
     // return an overall IHttpActionResult for a set of messages
-    let toHttpResult (controller:ApiController) msgs :IHttpActionResult = 
+    let toHttpResult (controller:ControllerBase) msgs : ActionResult = 
         match primaryResponse msgs with
         | NotFound -> 
-            upcast NotFoundResult(controller) 
+            upcast controller.NotFound("") // NegotiatedContentResult(HttpStatusCode.NotFound, "", controller)
         | BadRequest _ -> 
             // find all events and accumulate them
             let validationMsg = badRequestsToStr msgs
-            upcast NegotiatedContentResult(HttpStatusCode.BadRequest,validationMsg,controller) 
+            upcast controller.BadRequest(validationMsg)
         | InternalServerError msg -> 
-            upcast NegotiatedContentResult(HttpStatusCode.InternalServerError, msg,controller) 
+            upcast controller.StatusCode(StatusCodes.Status500InternalServerError, msg)
         | DomainEvent _ -> 
             // find all events and accumulate them
             let eventsMsg = domainEventsToStr msgs
-            upcast NegotiatedContentResult(HttpStatusCode.OK, eventsMsg,controller) 
+            upcast controller.Ok(eventsMsg)
 
 /// This is an example of a simple Controller for managing customers
 ///
@@ -111,9 +104,12 @@ module CustomersControllerHelper =
 /// As you can see, adding error handling in F# does NOT make the code more complex.
 /// 
 /// Compare this code with the C# equivalent to see the traditional approach to handling errors.
+
+[<ApiController>]
+// [<Route("[controller]")>]
 type CustomersController (csDao:CsRopExample.DataAccessLayer.ICustomerDao, fsDao:DataAccessLayer.ICustomerDao) as this =
     // We inject both the C# and F# DAO objects into the object via the constructor
-    inherit ApiController()
+    inherit ControllerBase()
 
     // =================================
     // Helper code
@@ -139,17 +135,17 @@ type CustomersController (csDao:CsRopExample.DataAccessLayer.ICustomerDao, fsDao
     // IHttpActionResults 
     // =================================
     // return OK
-    let ok content = 
+    let ok content : ActionResult = 
         if content = box () then
             // avoid converting unit to null!
-            OkResult(this) :> IHttpActionResult 
+            upcast this.Ok(null)
         else
-            NegotiatedContentResult(HttpStatusCode.OK, content,this) :> IHttpActionResult 
+            upcast this.Ok(content) 
 
     // create a two track version of Ok
     let okR result = mapR ok result
 
-    let toHttpResult result = 
+    let toHttpResult result : ActionResult = 
         result 
         |> valueOrDefault (CustomersControllerHelper.toHttpResult this)
 
@@ -213,7 +209,7 @@ type CustomersController (csDao:CsRopExample.DataAccessLayer.ICustomerDao, fsDao
     /// Get one customer, without error handling
     [<Route("customers/{customerId}")>]
     [<HttpGet>]
-    member this.Get(customerId:int) : IHttpActionResult =
+    member __.Get(customerId:int) : ActionResult =
         customerId
         |> csCreateCustomerId   // convert the int into a CustomerId
         |> csGetById            // get the Customer for that CustomerId
@@ -229,7 +225,7 @@ type CustomersController (csDao:CsRopExample.DataAccessLayer.ICustomerDao, fsDao
     /// * trap exceptions coming from the database
     [<Route("customersE/{customerId}")>]
     [<HttpGet>]
-    member this.GetWithErrorHandling(customerId:int) : IHttpActionResult =
+    member this.GetWithErrorHandling(customerId:int) : ActionResult =
         succeed customerId      // start with a success 
         |> logSuccessR "GetWithErrorHandling {0}"  // log the success branch
         |> createCustomerIdR    // convert the int into a CustomerId
@@ -249,7 +245,7 @@ type CustomersController (csDao:CsRopExample.DataAccessLayer.ICustomerDao, fsDao
     /// </summary>
     [<Route("customers/{customerId}")>]
     [<HttpPost>]
-    member this.Post(customerId:int, [<FromBody>] dto:CsRopExample.Dtos.CustomerDto) :IHttpActionResult  =
+    member this.Post(customerId:int, [<FromBody>] dto:CsRopExample.Dtos.CustomerDto) :ActionResult  =
         dto.Id <- customerId            // set the DTO's CustomerId
         let cust = csDtoToCustomer dto  // convert the DTO to a Customer
         csDao.Upsert(cust)              // upsert the Customer
@@ -268,7 +264,7 @@ type CustomersController (csDao:CsRopExample.DataAccessLayer.ICustomerDao, fsDao
     /// </remarks>
     [<Route("customersE/{customerId}")>]
     [<HttpPost>]
-    member this.PostWithErrorHandling(customerId:int, [<FromBody>] dto:CustomerDto) :IHttpActionResult  =
+    member this.PostWithErrorHandling(customerId:int, [<FromBody>] dto:CustomerDto) :ActionResult  =
         
         dto.Id <- customerId               // set the DTO's CustomerId
 
@@ -286,19 +282,19 @@ type CustomersController (csDao:CsRopExample.DataAccessLayer.ICustomerDao, fsDao
     // =========================================
 
     /// Return an example DTO to model a POST on
-    [<Route("example")>]
+    [<Route("customers/example")>]
     [<HttpGet>]
-    member this.GetExample() : IHttpActionResult = 
-        let dto = new CustomerDto()
+    member this.GetExample() : ActionResult = 
+        let dto = CustomerDto()
         dto.FirstName <- "Alice"
         dto.LastName <- "Adams"
         dto.Email <- "alice@example.com"
         ok dto
 
     /// Return all customers in the database
-    [<Route("customers/")>]
+    [<Route("customers")>]
     [<HttpGet>]
-    member this.GetAll() : IHttpActionResult = 
+    member this.GetAll() : ActionResult = 
         fsDao.GetAll()
         |> mapR (Seq.map DtoConverter.customerToDto)
         |> okR
@@ -320,7 +316,7 @@ type CustomersController (csDao:CsRopExample.DataAccessLayer.ICustomerDao, fsDao
 
     [<Route("customers2/{customerId}")>]
     [<HttpGet>]
-    member this.Get2(customerId:int) : IHttpActionResult =
+    member this.Get2(customerId:int) : ActionResult =
         // aliases
         let createCustomerId  = csCreateCustomerId   
         let getById           = csGetById            
@@ -339,7 +335,7 @@ type CustomersController (csDao:CsRopExample.DataAccessLayer.ICustomerDao, fsDao
 
     [<Route("customers2E/{customerId}")>]
     [<HttpGet>]
-    member this.GetWithErrorHandling2(customerId:int) : IHttpActionResult =
+    member this.GetWithErrorHandling2(customerId:int) : ActionResult =
         // aliases
         let createCustomerId  = createCustomerIdR    
         let getById           = getByIdR             
@@ -362,7 +358,7 @@ type CustomersController (csDao:CsRopExample.DataAccessLayer.ICustomerDao, fsDao
 
     [<Route("customers2/{customerId}")>]
     [<HttpPost>]
-    member this.Post2(customerId:int, [<FromBody>] dto:CsRopExample.Dtos.CustomerDto) :IHttpActionResult  =
+    member this.Post2(customerId:int, [<FromBody>] dto:CsRopExample.Dtos.CustomerDto) :ActionResult  =
         // aliases and setup
         let dtoToCustomer     = csDtoToCustomer 
         let upsertCustomer    = csDao.Upsert
@@ -383,7 +379,7 @@ type CustomersController (csDao:CsRopExample.DataAccessLayer.ICustomerDao, fsDao
        
     [<Route("customers2E/{customerId}")>]
     [<HttpPost>]
-    member this.PostWithErrorHandling2(customerId:int, [<FromBody>] dto:CustomerDto) :IHttpActionResult  =
+    member this.PostWithErrorHandling2(customerId:int, [<FromBody>] dto:CustomerDto) :ActionResult  =
         // aliases and setup
         let dtoToCustomer     = dtoToCustomerR
         let upsertCustomer    = upsertCustomerR
